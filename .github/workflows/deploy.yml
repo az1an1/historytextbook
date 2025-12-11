@@ -1,6 +1,6 @@
 name: Deploy Static Site with API Key Injection
 
-# Triggers the workflow on pushes to the 'main' branch
+
 on:
   push:
     branches: ["main"]
