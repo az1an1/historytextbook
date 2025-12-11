@@ -357,8 +357,9 @@
     <script>
         // --- Global State and Constants ---
         const API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=";
-        // User-provided API key has been inserted below:
-        const apiKey = "AIzaSyBmHItE3eb1iAxljmQKUmsHXaVjDXivn0Q"; 
+        // FIX: Replaced the user-provided API key with an empty string. 
+        // This lets the Canvas environment handle API key insertion at runtime, which prevents 403 errors for this model.
+        const apiKey = ""; 
         let currentQuiz = [];
         let currentQuestionIndex = 0;
         let score = 0;
