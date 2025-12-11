@@ -1,0 +1,75 @@
+name: Deploy Static Site with API Key Injection
+
+# Triggers the workflow on pushes to the 'main' branch
+on:
+  push:
+    branches: ["main"]
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+
+# Sets permissions needed for GitHub Pages deployment
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Allows concurrent deployment runs
+concurrency:
+  cancel-in-progress: true
+  group: pages
+
+jobs:
+  # The job that runs the build and injection process
+  build_and_inject:
+    runs-on: ubuntu-latest
+    steps:
+      # 1. Checkout the repository code
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      # 2. Check the API Key is available
+      - name: Check for API Key
+        run: |
+          if [ -z "${{ secrets.GEMINI_API_KEY }}" ]; then
+            echo "::error::GEMINI_API_KEY secret is not set in the repository secrets. Deployment aborted."
+            exit 1
+          fi
+
+      # 3. Inject the Secret into the HTML File
+      - name: Inject API Key into HTML
+        run: |
+          # Use sed (stream editor) to find and replace the placeholder.
+          # The -i flag edits the file in place.
+          # The key is enclosed in single quotes to protect special characters.
+          # We use a non-standard delimiter (e.g., '#') for sed to handle slashes in the key.
+          echo "Injecting GEMINI_API_KEY into timeline.html..."
+          
+          # Escaping the API key for sed using | as a delimiter
+          ESCAPED_API_KEY=$(echo "${{ secrets.GEMINI_API_KEY }}" | sed 's/[\&/]/\\&/g')
+          
+          # Replace the empty string placeholder: const apiKey = "";
+          sed -i "s|const apiKey = \"\";|const apiKey = \"${ESCAPED_API_KEY}\";|g" timeline.html
+          
+          echo "Injection complete. The API key is now embedded in timeline.html for the deployed site."
+
+      # 4. Upload the artifact (the modified HTML file) for deployment
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          # The directory containing the index.html file (root of the repo)
+          path: .
+
+  # The job that deploys the uploaded artifact
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: build_and_inject
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
