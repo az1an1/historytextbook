@@ -8,15 +8,19 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Load a traditional-looking font (Tinos is a good serif option) -->
     <link href="https://fonts.googleapis.com/css2?family=Tinos:ital,wght@0,400;0,700;1,400;1,700&display=swap" rel="stylesheet">
-    <!-- Firebase Imports -->
+    <!-- Firebase Imports (Required for the environment) -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
         
-        // Global Firebase variables required by the environment (even if not fully used for this app's data storage)
+        // Global Firebase variables required by the environment
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
         const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+        
+        setLogLevel('Debug');
 
         try {
             const app = initializeApp(firebaseConfig);
@@ -24,9 +28,8 @@
             window.auth = getAuth(app);
             
             // Authentication: Sign in with token if available, otherwise anonymously
-            const authToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
-            if (authToken) {
-                signInWithCustomToken(window.auth, authToken)
+            if (initialAuthToken) {
+                signInWithCustomToken(window.auth, initialAuthToken)
                     .then(userCredential => {
                         console.log("Firebase signed in with custom token.", userCredential.user.uid);
                     })
@@ -54,7 +57,8 @@
             background-color: #f5f5dc; /* Beige/Cream */
             box-shadow: 0 10px 20px rgba(0, 0, 0, 0.5);
             border: 10px solid #a1887f; /* Ornate border color */
-            border-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cpath d='M0,0 L100,0 L100,100 L0,100 Z' stroke='%23795548' stroke-width='5' fill='none' /%3E%3Cpath d='M5,5 L95,5 L95,95 L5,95 Z' stroke='%23a1887f' stroke-width='3' fill='none' /%3E%3C/svg%3E") 10;
+            /* Using a simple border for compatibility */
+            border-style: ridge;
         }
 
         .title-ornate {
@@ -134,7 +138,6 @@
     <!-- Sticky Navigation Bar (Emperors and Quiz) -->
     <nav class="sticky-navbar top-0 w-full bg-[#795548] bg-opacity-95 shadow-lg p-2 md:p-3 rounded-lg justify-center space-x-1 md:space-x-4 mb-8">
         <a href="#timeline-view" class="text-white hover:bg-yellow-600 transition duration-300 py-1 px-3 md:py-2 md:px-4 rounded-md font-bold text-sm md:text-base bg-[#880e4f]">Timeline View</a>
-        <!-- Removed 'hidden md:inline-block' to make shortcuts visible on all screen sizes -->
         <a href="#babar" class="text-white hover:bg-yellow-600 transition duration-300 py-1 px-3 md:py-2 md:px-4 rounded-md font-bold text-sm md:text-base bg-[#880e4f]">Babar</a>
         <a href="#humayun" class="text-white hover:bg-yellow-600 transition duration-300 py-1 px-3 md:py-2 md:px-4 rounded-md font-bold text-sm md:text-base bg-[#880e4f]">Humayun</a>
         <a href="#akbar" class="text-white hover:bg-yellow-600 transition duration-300 py-1 px-3 md:py-2 md:px-4 rounded-md font-bold text-sm md:text-base bg-[#880e4f]">Akbar</a>
@@ -247,7 +250,7 @@
                                 <li><span class="font-semibold text-red-900">1658:</span> Defeated and imprisoned his father Shah Jahan after winning the War of Succession against his brothers (Dara Shikoh, Shuja, and Murad Baksh).</li>
                                 <li><span class="font-semibold text-red-900">1679:</span> Reimposed the Jizya tax, reversing Akbar's secular policies.</li>
                                 <li>His policies led to increasing tensions with the Sikhs, Marathas (under Shivaji), and Rajputs.</li>
-                                <li>Expanded the empire to its **largest territorial extent**, conquering the Deccan Sultanates of Bijapur (1686) and Golconda (1687).</li>
+                                <li>Expanded the empire to its **largest territorial extent** through conquest, conquering the Deccan Sultanates of Bijapur (1686) and Golconda (1687).</li>
                                 <li><span class="font-semibold text-red-900">1707:</span> Died at Ahmednagar, his long rule depleting the imperial treasury and leading to immediate decentralization.</li>
                             </ul>
                         </div>
@@ -356,9 +359,17 @@
 
     <script>
         // --- Global State and Constants ---
-        const API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=";
-        // User-provided API key has been inserted below:
-        const apiKey = "AIzaSyBmHItE3eb1iAxljmQKUmsHXaVjDXivn0Q"; 
+        // Base endpoint for the Gemini API call
+        const GEMINI_API_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent";
+        
+        // IMPORTANT for GitHub deployment: 
+        // JavaScript on a static page cannot directly access GitHub secrets. 
+        // You MUST use a build step (like a GitHub Action) to replace this empty string 
+        // with the value of your GEMINI_API_KEY secret before deployment.
+        // Example: const apiKey = "${{ secrets.GEMINI_API_KEY }}"; (inside the build script)
+        const apiKey = ""; 
+        const MAX_RETRIES = 5;
+        
         let currentQuiz = [];
         let currentQuestionIndex = 0;
         let score = 0;
@@ -367,7 +378,6 @@
         let isFactGenerating = false;
 
         // --- DOM Elements ---
-        const viewContainer = document.getElementById('view-container');
         const timelineView = document.getElementById('timeline-view');
         const quizSetupView = document.getElementById('quiz-setup');
         const quizArea = document.getElementById('quiz-area');
@@ -387,21 +397,25 @@
         // --- Utility Functions ---
 
         // Exponential backoff retry logic for API calls
-        async function fetchWithExponentialBackoff(url, options, maxRetries = 5) {
+        async function fetchWithExponentialBackoff(options, maxRetries = 5) {
+            const url = `${GEMINI_API_BASE_URL}?key=${apiKey}`; 
             for (let i = 0; i < maxRetries; i++) {
                 try {
                     const response = await fetch(url, options);
                     if (response.ok) {
                         return await response.json();
                     }
-                    if (response.status === 429 && i < maxRetries - 1) { // Rate limit or transient error
+                    // Handle 403/429/400 for retry
+                    if ((response.status === 403 || response.status === 429 || response.status === 400) && i < maxRetries - 1) { 
                         const delay = Math.pow(2, i) * 1000 + Math.random() * 1000;
                         await new Promise(resolve => setTimeout(resolve, delay));
                         continue;
                     }
+                    console.error(`Attempt ${i + 1} failed with status: ${response.status} and message: ${await response.text()}`);
                     throw new Error(`API request failed with status: ${response.status}`);
                 } catch (error) {
                     if (i === maxRetries - 1) {
+                        console.error(`Final API request failure after ${maxRetries} retries.`, error);
                         throw error;
                     }
                 }
@@ -445,7 +459,7 @@
 
             const payload = {
                 contents: [{ parts: [{ text: userQuery }] }],
-                tools: [{ "google_search": {} }],
+                // Removed tools: [{ "google_search": {} }] to allow structured JSON output
                 systemInstruction: { parts: [{ text: systemInstruction }] },
                 generationConfig: {
                     responseMimeType: "application/json",
@@ -467,9 +481,9 @@
                     }
                 },
             };
-
+            
             try {
-                const responseJson = await fetchWithExponentialBackoff(API_URL + apiKey, {
+                const responseJson = await fetchWithExponentialBackoff({
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload)
@@ -490,7 +504,7 @@
                 quizArea.innerHTML = `
                     <div class="p-6 text-center text-red-700 bg-red-100 border border-red-400 rounded-lg">
                         <p class="font-bold">Failed to generate quiz.</p>
-                        <p class="text-sm mt-2">Please try again later or check your network connection.</p>
+                        <p class="text-sm mt-2">API Error: ${error.message}. Please check your topic and try again.</p>
                         <button onclick="setView('quiz-setup')" class="mt-4 quiz-button py-2 px-4">Go Back to Setup</button>
                     </div>
                 `;
@@ -516,12 +530,12 @@
 
             const payload = {
                 contents: [{ parts: [{ text: userQuery }] }],
-                tools: [{ "google_search": {} }], // Use search grounding for accuracy
+                tools: [{ "google_search": {} }], // This remains for fact grounding
                 systemInstruction: { parts: [{ text: systemInstruction }] },
             };
-
+            
             try {
-                const responseJson = await fetchWithExponentialBackoff(API_URL + apiKey, {
+                const responseJson = await fetchWithExponentialBackoff({
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload)
@@ -562,7 +576,7 @@
 
             } catch (error) {
                 console.error("Error generating fact:", error);
-                factText.textContent = "Sorry, I couldn't generate a fact right now. Please check your connection and try again.";
+                factText.textContent = `Sorry, I couldn't generate a fact right now due to an API error: ${error.message}. Please try again later.`;
                 factSources.innerHTML = '';
                 factResultArea.classList.remove('hidden');
             } finally {
@@ -593,7 +607,7 @@
                     ${q.options.map((option, index) => `
                         <button 
                             class="quiz-option w-full text-left p-3 rounded-lg bg-yellow-50 text-stone-700 border-2 border-transparent transition duration-200"
-                            data-option="${option}"
+                            data-option="${option.replace(/"/g, '&quot;').replace(/'/g, '&#39;')}"
                             onclick="handleAnswer(this, '${q.correctAnswer.replace(/'/g, "\\'")}', '${q.explanation.replace(/'/g, "\\'")}')"
                             >
                             ${String.fromCharCode(65 + index)}. ${option}
@@ -622,7 +636,7 @@
                 btn.onclick = null; // Remove handler
             });
 
-            const isCorrect = selectedButton.dataset.option === correctAnswer;
+            const isCorrect = selectedButton.dataset.option.replace(/&#39;/g, "'").replace(/&quot;/g, '"') === correctAnswer;
 
             // Highlight the selected option
             selectedButton.classList.remove('bg-yellow-50');
@@ -637,7 +651,7 @@
             } else {
                 selectedButton.classList.add('bg-red-200', 'border-red-600');
                 // Find and highlight the correct answer
-                Array.from(optionsContainer.children).find(btn => btn.dataset.option === correctAnswer).classList.add('bg-green-300', 'border-green-600');
+                Array.from(optionsContainer.children).find(btn => btn.dataset.option.replace(/&#39;/g, "'").replace(/&quot;/g, '"') === correctAnswer).classList.add('bg-green-300', 'border-green-600');
                 feedbackArea.innerHTML = `<p class="font-bold text-red-700">Incorrect. The correct answer was: ${correctAnswer}.</p><p class="text-sm">${explanation}</p>`;
                 feedbackArea.classList.remove('border-gray-400');
                 feedbackArea.classList.add('border-red-600');
